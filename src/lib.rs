@@ -466,7 +466,16 @@ impl Build {
                 build.define("HAVE_STRNLEN", "1");
             }
 
-            if !target.contains("uwp") && windows::has_icp_headers() {
+            // ZMQ_HAVE_IPC is gated on the windows-side IPC probe
+            // (winsock2.h + afunix.h). On windows-gnu (mingw) those
+            // headers exist, but libzmq 4.3.5's `ipc_address.hpp` then
+            // includes the POSIX `<sys/socket.h>` which mingw lacks.
+            // So skip the IPC define for windows-gnu — peer IPC over
+            // TCP still works.
+            if !target.contains("uwp")
+                && !target.contains("gnu")
+                && windows::has_icp_headers()
+            {
                 build.define("ZMQ_HAVE_IPC", "1");
             }
         } else if target.contains("linux") {
