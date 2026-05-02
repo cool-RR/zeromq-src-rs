@@ -435,18 +435,29 @@ impl Build {
 
         let mut has_strlcpy = false;
         if target.contains("windows") {
-            // On Windows Vista+, libzmq's epoll.cpp uses epoll APIs that
-            // are emulated by the bundled `wepoll` library. The original
-            // upstream code guarded this with `!target.contains("gnu")`,
-            // assuming mingw provides epoll natively — it doesn't.
-            // Compiling wepoll for windows-gnu too gives us the symbols
-            // libzmq needs (`epoll_create`, `epoll_wait`, `epoll_ctl`,
-            // `epoll_close`).
-            add_c_sources(
-                &mut build,
-                vendor.join("external/wepoll"),
-                &["wepoll.c"],
-            );
+            // On Windows Vista+, libzmq's epoll.cpp uses epoll APIs
+            // that are emulated by the bundled `wepoll` library. We
+            // need wepoll for both MSVC and mingw — upstream's gate
+            // (`!target.contains("gnu")`) was wrong: mingw doesn't
+            // provide epoll natively.
+            //
+            // wepoll.c contains C-only constructs (typedef redefinitions
+            // via macros, implicit void* conversions in malloc) that
+            // C++ rejects. The original `add_c_sources` helper sets
+            // `build.cpp(true)` at the end, forcing all files including
+            // .c ones to compile as C++ — this fails on wepoll.
+            // Compile wepoll in a separate cc::Build with cpp() left
+            // unset so cc-rs detects .c → C from the extension.
+            let wepoll_dir = vendor.join("external/wepoll");
+            let mut wepoll_build = cc::Build::new();
+            wepoll_build
+                .file(wepoll_dir.join("wepoll.c"))
+                .include(&wepoll_dir)
+                .opt_level(3);
+            wepoll_build.compile("wepoll");
+            // Main C++ build still needs wepoll's headers for
+            // libzmq's epoll.cpp.
+            build.include(&wepoll_dir);
 
             build.define("ZMQ_HAVE_WINDOWS", "1");
             build.define("ZMQ_IOTHREAD_POLLER_USE_EPOLL", "1");
