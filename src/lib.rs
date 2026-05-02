@@ -435,14 +435,18 @@ impl Build {
 
         let mut has_strlcpy = false;
         if target.contains("windows") {
-            // on windows vista and up we can use `epoll` through the `wepoll` lib
-            if !target.contains("gnu") {
-                add_c_sources(
-                    &mut build,
-                    vendor.join("external/wepoll"),
-                    &["wepoll.c"],
-                );
-            }
+            // On Windows Vista+, libzmq's epoll.cpp uses epoll APIs that
+            // are emulated by the bundled `wepoll` library. The original
+            // upstream code guarded this with `!target.contains("gnu")`,
+            // assuming mingw provides epoll natively — it doesn't.
+            // Compiling wepoll for windows-gnu too gives us the symbols
+            // libzmq needs (`epoll_create`, `epoll_wait`, `epoll_ctl`,
+            // `epoll_close`).
+            add_c_sources(
+                &mut build,
+                vendor.join("external/wepoll"),
+                &["wepoll.c"],
+            );
 
             build.define("ZMQ_HAVE_WINDOWS", "1");
             build.define("ZMQ_IOTHREAD_POLLER_USE_EPOLL", "1");
